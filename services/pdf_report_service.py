@@ -15,8 +15,9 @@ from services.analytics_service import AnalyticsService
 
 class PdfReportService:
     @staticmethod
-    def generate_report(filepath="Student_Performance_Report.pdf", institution_name="Viswajyothi College of Engineering and Technology", department_name="Computer Science & Engineering"):
-        df = AnalyticsService.get_full_dataframe()
+    def generate_report(filepath="Student_Performance_Report.pdf", df=None, institution_name="Viswajyothi College of Engineering and Technology", department_name="Computer Science & Engineering"):
+        if df is None:
+            df = AnalyticsService.get_full_dataframe()
         if df.empty:
             return False, "No data available to generate report."
 
@@ -61,7 +62,7 @@ class PdfReportService:
             median_sgpa = sgpa_data.median() if not sgpa_data.empty else 0
             high_performers = len(sgpa_data[sgpa_data >= 9.0]) if not sgpa_data.empty else 0
 
-            risks = AnalyticsService.identify_at_risk_students()
+            risks = AnalyticsService.identify_at_risk_students(df=df)
             high_risk_count = len([r for r in risks if r['risk'] == 'High Risk'])
 
             # ---------------------------------------------------------
@@ -162,7 +163,7 @@ class PdfReportService:
             elements.append(PageBreak())
             elements.append(Paragraph("<b>4. Subject-wise Analysis</b>", styles['SectionHeader']))
             
-            stats = AnalyticsService.calculate_subject_difficulty()
+            stats = AnalyticsService.calculate_subject_difficulty(df=df)
             if stats:
                 subj_data = [['Subject Name', 'Course Avg', 'Pass %', 'Difficulty']]
                 for subj, data in sorted(stats.items(), key=lambda x: x[1].get('difficulty_score', 0), reverse=True):
@@ -322,10 +323,52 @@ class PdfReportService:
                  elements.append(Paragraph(f"💡 System flags '{diff_sub}' as structurally difficult. Immediate curricular review recommended.", styles['InsightText']))
 
             # ---------------------------------------------------------
-            # SECTION 11 - RECOMMENDATIONS
+            # SECTION 11 - COMPREHENSIVE STUDENT REGISTRY & MARKS
             # ---------------------------------------------------------
             elements.append(PageBreak())
-            elements.append(Paragraph("<b>11. Recommendations</b>", styles['SectionHeader']))
+            elements.append(Paragraph("<b>11. Comprehensive Student Registry & Marks</b>", styles['SectionHeader']))
+            elements.append(Paragraph("A full breakdown of every student, their subjects, grades, and risk category.", styles['CustomBodyText']))
+            
+            if not df.empty:
+                registry_data = [['Roll No', 'Student Name', 'Subject', 'Marks (Grade)', 'Risk Category']]
+                
+                # Sort to ensure consistent student grouping
+                sorted_df = df.sort_values(by=['roll_no', 'subject_code'])
+                for _, row in sorted_df.iterrows():
+                    roll = str(row.get('roll_no', 'N/A'))
+                    
+                    name = str(row.get('student_name', 'N/A'))
+                    if len(name) > 18: name = name[:18] + ".."
+                        
+                    subj_code = str(row.get('subject_code', ''))
+                    subj_name = str(row.get('subject_name', ''))
+                    subj = f"{subj_code} - {subj_name}"
+                    if len(subj) > 28: subj = subj[:28] + ".."
+                        
+                    marks = f"{row.get('marks', 0)} ({row.get('grade', '')})"
+                    risk = str(row.get('risk_category', 'Unknown'))
+                    
+                    registry_data.append([roll, name, subj, marks, risk])
+                    
+                t_reg = Table(registry_data, colWidths=[90, 110, 180, 75, 75], repeatRows=1)
+                t_reg.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#263238')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('ALIGN', (3, 0), (3, -1), 'CENTER'),
+                ]))
+                elements.append(t_reg)
+            else:
+                elements.append(Paragraph("No detailed student records found.", styles['CustomBodyText']))
+
+
+            # ---------------------------------------------------------
+            # SECTION 12 - RECOMMENDATIONS
+            # ---------------------------------------------------------
+            elements.append(PageBreak())
+            elements.append(Paragraph("<b>12. Recommendations</b>", styles['SectionHeader']))
             recs = (
                 "<b>1. Corrective Pedagogy:</b> Conduct remedial sessions tailored for the most fundamentally challenging subjects.<br/><br/>"
                 "<b>2. Intervention Strategy:</b> Institute mandatory mentoring and academic monitoring for the High Risk cross-section.<br/><br/>"
@@ -335,9 +378,9 @@ class PdfReportService:
             elements.append(Paragraph(recs, styles['CustomBodyText']))
 
             # ---------------------------------------------------------
-            # SECTION 12 - APPENDIX
+            # SECTION 13 - APPENDIX
             # ---------------------------------------------------------
-            elements.append(Paragraph("<b>12. Appendix</b>", styles['SectionHeader']))
+            elements.append(Paragraph("<b>13. Appendix</b>", styles['SectionHeader']))
             elements.append(Paragraph("<b>A. Grading Schema</b>", styles['CustomBodyText']))
             grade_schema = [
                 ['Grade', 'Point', 'Status'],
@@ -371,4 +414,6 @@ class PdfReportService:
             return True, f"Institution-Grade Report successfully exported to {filepath}"
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return False, f"Failed to generate report PDF: {str(e)}"

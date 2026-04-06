@@ -28,8 +28,9 @@ class AnalyticsService:
 
 
     @staticmethod
-    def identify_at_risk_students():
-        df = AnalyticsService.get_full_dataframe()
+    def identify_at_risk_students(df=None):
+        if df is None:
+            df = AnalyticsService.get_full_dataframe()
         if df.empty: return []
         
         risk_list = []
@@ -51,8 +52,9 @@ class AnalyticsService:
         return risk_list
 
     @staticmethod
-    def calculate_subject_difficulty():
-        df = AnalyticsService.get_full_dataframe()
+    def calculate_subject_difficulty(df=None):
+        if df is None:
+            df = AnalyticsService.get_full_dataframe()
         if df.empty: return {}
         
         difficulty = {}
@@ -74,22 +76,23 @@ class AnalyticsService:
         return difficulty
 
     @staticmethod
-    def evaluate_faculty_performance():
-        conn = get_connection()
-        query = """
-            SELECT f.name as faculty_name, s.subject_name, m.marks
-            FROM faculty f
-            JOIN faculty_subjects fs ON f.id = fs.faculty_id
-            JOIN subjects s ON fs.subject_id = s.id
-            JOIN marks m ON s.id = m.subject_id
-        """
-        try:
-            df = pd.read_sql_query(query, conn)
-        except Exception as e:
-            print(f"Database Analytics Warning: {e}")
-            df = pd.DataFrame()
-        finally:
-            conn.close()
+    def evaluate_faculty_performance(df=None):
+        if df is None:
+            conn = get_connection()
+            query = """
+                SELECT f.name as faculty_name, s.subject_name, m.marks
+                FROM faculty f
+                JOIN faculty_subjects fs ON f.id = fs.faculty_id
+                JOIN subjects s ON fs.subject_id = s.id
+                JOIN marks m ON s.id = m.subject_id
+            """
+            try:
+                df = pd.read_sql_query(query, conn)
+            except Exception as e:
+                print(f"Database Analytics Warning: {e}")
+                df = pd.DataFrame()
+            finally:
+                conn.close()
             
         if df.empty: return {}
         
