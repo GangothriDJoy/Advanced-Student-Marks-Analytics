@@ -26,9 +26,8 @@ class DashboardView(tb.Frame):
         nav.pack(side=TOP, fill=X)
         
         tb.Label(nav, text="Academic Performance Intelligence Platform", font=("Helvetica", 18, "bold"), bootstyle="primary-inverse").pack(side=LEFT, padx=20, pady=15)
-        tb.Button(nav, text="Logout", command=self.logout, bootstyle="light-outline").pack(side=RIGHT, padx=10, pady=15)
-        tb.Button(nav, text="Refresh DB", command=self.refresh_dashboard, bootstyle="light-outline").pack(side=RIGHT, padx=10, pady=15)
-        
+        tb.Button(nav, text="Logout", command=self.logout, bootstyle="danger").pack(side=RIGHT, padx=10, pady=15)
+        tb.Button(nav, text="Refresh DB", command=self.refresh_dashboard, bootstyle="light").pack(side=RIGHT, padx=10, pady=15)
         # Sidebar
         sidebar = tb.Frame(self, bootstyle="dark", width=220)
         sidebar.pack(side=LEFT, fill=Y)
@@ -130,16 +129,43 @@ class DashboardView(tb.Frame):
         
     def import_ktu_results(self):
         from tkinter import filedialog
+        import threading
         filepath = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf"), ("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")])
         if filepath:
-            from services.import_service import ImportService
-            success, msg = ImportService.bulk_import_ktu_results(filepath)
-            if success:
-                Messagebox.show_info(msg, "Success")
-                self.refresh_dashboard()
-            else:
-                Messagebox.show_error(msg, "Error")
-
+            loading = tb.Toplevel(title="Processing")
+            loading.geometry("320x130")
+            loading.position_center()
+            loading.transient(self.winfo_toplevel())
+            loading.grab_set()
+            tb.Label(loading, text="Parsing Data...\nThis may take some time depending on file size.", font=("Helvetica", 10), justify=CENTER).pack(pady=(20, 10))
+            progress = tb.Progressbar(loading, mode='indeterminate', bootstyle="info")
+            progress.pack(fill=X, padx=20)
+            progress.start(10)
+            
+            result_container = []
+            
+            def task():
+                from services.import_service import ImportService
+                success, msg = ImportService.bulk_import_ktu_results(filepath)
+                result_container.append((success, msg))
+                
+            thread = threading.Thread(target=task, daemon=True)
+            thread.start()
+            
+            def check_thread():
+                if thread.is_alive():
+                    self.after(100, check_thread)
+                else:
+                    loading.destroy()
+                    if result_container:
+                        success, msg = result_container[0]
+                        if success:
+                            Messagebox.show_info(msg, "Success")
+                            self.refresh_dashboard()
+                        else:
+                            Messagebox.show_error(msg, "Error")
+            
+            self.after(100, check_thread)
     def export_csv(self):
         from tkinter import filedialog
         from services.export_service import ExportService
@@ -165,11 +191,19 @@ class DashboardView(tb.Frame):
     def export_pdf(self):
         from tkinter import filedialog
         from services.export_service import ExportService
-        filepath = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
-        if filepath:
+        import os
+        dirpath = filedialog.askdirectory(title="Select Folder to Save Department PDFs")
+        if dirpath:
+            # Create a base filepath from the directory
+            filepath = os.path.join(dirpath, "Analytics_Report.pdf")
             success, msg = ExportService.export_analytics_pdf(filepath=filepath)
             if success:
                 Messagebox.show_info(msg, "Success")
+                # Auto-open the folder so they can see all the split PDFs
+                try:
+                    os.startfile(dirpath)
+                except:
+                    pass
             else:
                 Messagebox.show_error(msg, "Error")
                 
